@@ -105,39 +105,41 @@ class Module extends \Aurora\System\Module\AbstractModule
 	public function onAfterLogin(&$aArgs, &$mResult)
 	{
 		$oUser = \Aurora\System\Api::getAuthenticatedUser();
-		
-		$aGroupsOfUser = $this->getUserGroupsManager()->getGroupsOfUser($oUser->EntityId);
-		$aUserCapas = [];
-		foreach ($aGroupsOfUser as $oGroupUser)
+		if ($oUser)
 		{
-			$oGroup = $this->getUserGroupsManager()->getGroup($oGroupUser->GroupId);
-			$aGroupCapas = json_decode($oGroup->{self::GetName() . '::Capabilities'});
-			$aUserCapas = array_unique(array_merge($aUserCapas, $aGroupCapas));
-		}
-		
-		$aAllCapaModules = [];
-		$aAllowedCapaModules = [];
-		foreach ($this->aCapabilities as $sCapaName => $oCapa)
-		{
-			$aAllCapaModules = array_unique(array_merge($aAllCapaModules, $oCapa['Modules']));
-			if (in_array($sCapaName, $aUserCapas))
+			$aGroupsOfUser = $this->getUserGroupsManager()->getGroupsOfUser($oUser->EntityId);
+			$aUserCapas = [];
+			foreach ($aGroupsOfUser as $oGroupUser)
 			{
-				$aAllowedCapaModules = array_unique(array_merge($aAllowedCapaModules, $oCapa['Modules']));
+				$oGroup = $this->getUserGroupsManager()->getGroup($oGroupUser->GroupId);
+				$aGroupCapas = json_decode($oGroup->{self::GetName() . '::Capabilities'});
+				$aUserCapas = array_unique(array_merge($aUserCapas, $aGroupCapas));
 			}
-		}
-		
-		foreach ($aAllCapaModules as $sModuleName)
-		{
-			if (in_array($sModuleName, $aAllowedCapaModules))
+
+			$aAllCapaModules = [];
+			$aAllowedCapaModules = [];
+			foreach ($this->aCapabilities as $sCapaName => $oCapa)
 			{
-				$oUser->enableModule($sModuleName);
+				$aAllCapaModules = array_unique(array_merge($aAllCapaModules, $oCapa['Modules']));
+				if (in_array($sCapaName, $aUserCapas))
+				{
+					$aAllowedCapaModules = array_unique(array_merge($aAllowedCapaModules, $oCapa['Modules']));
+				}
 			}
-			else
+
+			foreach ($aAllCapaModules as $sModuleName)
 			{
-				$oUser->disableModule($sModuleName);
+				if (in_array($sModuleName, $aAllowedCapaModules))
+				{
+					$oUser->enableModule($sModuleName);
+				}
+				else
+				{
+					$oUser->disableModule($sModuleName);
+				}
 			}
+			$oCoreModuleDecorator = \Aurora\System\Api::GetModuleDecorator('Core');
+			$oCoreModuleDecorator->UpdateUserObject($oUser);
 		}
-		$oCoreModuleDecorator = \Aurora\System\Api::GetModuleDecorator('Core');
-		$oCoreModuleDecorator->UpdateUserObject($oUser);
 	}
 }

@@ -4,7 +4,7 @@ var Types = require('%PathToCoreWebclientModule%/js/utils/Types.js');
 
 module.exports = {
 	ServerModuleName: 'CoreUserGroupsCapabilities',
-	HashModuleName: 'groups-apabilities',
+	HashModuleName: 'groups-capabilities',
 	
 	Capabilities: [],
 
