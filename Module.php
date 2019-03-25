@@ -39,6 +39,9 @@ class Module extends \Aurora\System\Module\AbstractModule
 		];
 		
 		$this->subscribeEvent('Core::Login::after', array($this, 'onAfterLogin'));
+		$this->subscribeEvent('CoreUserGroups::RemoveUsersFromGroup::after', array($this, 'onAfterRemoveUsersFromGroup'));
+		$this->subscribeEvent('CoreUserGroups::AddToGroup::after', array($this, 'onAfterAddToGroup'));
+		$this->subscribeEvent('CoreUserGroups::SaveGroupsOfUser::after', array($this, 'onAfterSaveGroupsOfUser'));
 		
 		\Aurora\Modules\CoreUserGroups\Classes\Group::extend(
 			self::GetName(),
@@ -90,11 +93,45 @@ class Module extends \Aurora\System\Module\AbstractModule
 	{
 		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
 		
+		
 		$oGroup = $this->getUserGroupsManager()->getGroup($GroupId);
 		$oGroup->{self::GetName() . '::Capabilities'} = json_encode($CapaNames);
 		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
+		$bResult = $oEavManager->saveEntity($oGroup);
 		
-		return $oEavManager->saveEntity($oGroup);
+		$aGroupUserObjects = $this->getUserGroupsManager()->getGroupUserObjects($GroupId);
+		$aUsersIds = [];
+		foreach ($aGroupUserObjects as $oGroupUser)
+		{
+			$aUsersIds[] = $oGroupUser->UserId;
+		}
+		$aFilters = ['EntityId' => [$aUsersIds, 'IN']];
+		$oCoreDecorator = \Aurora\Modules\Core\Module::Decorator();
+		$aUsers = [];
+		if ($oCoreDecorator && !empty($aUsersIds))
+		{
+			$aUsers =  $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, $aFilters, 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+		}
+		
+		foreach ($aUsers as $oUser)
+		{
+			$this->setUserCapabilities($oUser);
+		}
+		
+		return $bResult;
+	}
+	
+	static protected function getGroupCapabilities($oUserGroupsManager, $iGroupId)
+	{
+		static $aGroupsCapas = [];
+		
+		if (!isset($aGroupsCapas[$iGroupId]))
+		{
+			$oGroup = $oUserGroupsManager->getGroup($iGroupId);
+			$aGroupsCapas[$iGroupId] = json_decode($oGroup->{self::GetName() . '::Capabilities'});
+		}
+		
+		return $aGroupsCapas[$iGroupId];
 	}
 	
 	/**
@@ -105,14 +142,50 @@ class Module extends \Aurora\System\Module\AbstractModule
 	public function onAfterLogin(&$aArgs, &$mResult)
 	{
 		$oUser = \Aurora\System\Api::getAuthenticatedUser();
-		if ($oUser)
+		$this->setUserCapabilities($oUser);
+	}
+	
+	public function onAfterRemoveUsersFromGroup(&$aArgs, &$mResult)
+	{
+		$this->setUserListCapabilities($aArgs['UsersIds']);
+	}
+	
+	public function onAfterAddToGroup(&$aArgs, &$mResult)
+	{
+		$this->setUserListCapabilities($aArgs['UsersIds']);
+	}
+	
+	public function onAfterSaveGroupsOfUser(&$aArgs, &$mResult)
+	{
+		$this->setUserListCapabilities([$aArgs['UserId']]);
+	}
+	
+	protected function setUserListCapabilities($aUsersIds)
+	{
+		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
+		$aFilters = ['EntityId' => [$aUsersIds, 'IN']];
+		$oCoreDecorator = \Aurora\Modules\Core\Module::Decorator();
+		$aUsers = [];
+		if ($oCoreDecorator && !empty($aUsersIds))
+		{
+			$aUsers =  $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, $aFilters, 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+		}
+		
+		foreach ($aUsers as $oUser)
+		{
+			$this->setUserCapabilities($oUser);
+		}
+	}
+	
+	protected function setUserCapabilities($oUser)
+	{
+		if ($oUser instanceof \Aurora\Modules\Core\Classes\User)
 		{
 			$aGroupsOfUser = $this->getUserGroupsManager()->getGroupsOfUser($oUser->EntityId);
 			$aUserCapas = [];
 			foreach ($aGroupsOfUser as $oGroupUser)
 			{
-				$oGroup = $this->getUserGroupsManager()->getGroup($oGroupUser->GroupId);
-				$aGroupCapas = json_decode($oGroup->{self::GetName() . '::Capabilities'});
+				$aGroupCapas = $this->getGroupCapabilities($this->getUserGroupsManager(), $oGroupUser->GroupId);
 				$aUserCapas = array_unique(array_merge($aUserCapas, $aGroupCapas));
 			}
 
@@ -138,6 +211,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 					$oUser->disableModule($sModuleName);
 				}
 			}
+			
 			$oCoreModuleDecorator = \Aurora\System\Api::GetModuleDecorator('Core');
 			$oCoreModuleDecorator->UpdateUserObject($oUser);
 		}
