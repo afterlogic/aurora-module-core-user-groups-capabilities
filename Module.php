@@ -39,6 +39,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 		];
 		
 		$this->subscribeEvent('Core::Login::after', array($this, 'onAfterLogin'));
+		$this->subscribeEvent('CoreUserGroups::DeleteGroups::after', array($this, 'onAfterRemoveDeleteGroups'));
 		$this->subscribeEvent('CoreUserGroups::RemoveUsersFromGroup::after', array($this, 'onAfterRemoveUsersFromGroup'));
 		$this->subscribeEvent('CoreUserGroups::AddToGroup::after', array($this, 'onAfterAddToGroup'));
 		$this->subscribeEvent('CoreUserGroups::SaveGroupsOfUser::after', array($this, 'onAfterSaveGroupsOfUser'));
@@ -121,6 +122,13 @@ class Module extends \Aurora\System\Module\AbstractModule
 		return $bResult;
 	}
 	
+	/**
+	 * Obtains capabilities for specified group.
+	 * @staticvar array $aGroupsCapas
+	 * @param object $oUserGroupsManager
+	 * @param int $iGroupId
+	 * @return array
+	 */
 	static protected function getGroupCapabilities($oUserGroupsManager, $iGroupId)
 	{
 		static $aGroupsCapas = [];
@@ -128,12 +136,21 @@ class Module extends \Aurora\System\Module\AbstractModule
 		if (!isset($aGroupsCapas[$iGroupId]))
 		{
 			$oGroup = $oUserGroupsManager->getGroup($iGroupId);
-			$aGroupsCapas[$iGroupId] = json_decode($oGroup->{self::GetName() . '::Capabilities'});
+			$sCapabilities = $oGroup->{self::GetName() . '::Capabilities'};
+			$aGroupsCapas[$iGroupId] = empty($sCapabilities) ? [] : json_decode($sCapabilities);
 		}
 		
 		return $aGroupsCapas[$iGroupId];
 	}
 	
+	/**
+	 * Obtains capabilities for specified user.
+	 * @staticvar array $aAllUserGroup
+	 * @param object $oUserGroupsManager
+	 * @param int $iUserId
+	 * @param array $aUsersIds
+	 * @return array
+	 */
 	static protected function getUserCapas($oUserGroupsManager, $iUserId, $aUsersIds)
 	{
 		static $aAllUserGroup = null;
@@ -175,33 +192,78 @@ class Module extends \Aurora\System\Module\AbstractModule
 	}
 	
 	/**
-	 * Applies capabilities for user.
+	 * Applies capabilities for just authenticated user.
 	 * @param array $aArgs
 	 * @param mixed $mResult
 	 */
 	public function onAfterLogin(&$aArgs, &$mResult)
 	{
-		$oUser = \Aurora\System\Api::getAuthenticatedUser();
-		$this->setUserCapabilities($oUser);
+		if ($mResult !== false)
+		{
+			$oUser = \Aurora\System\Api::getAuthenticatedUser();
+			if ($oUser instanceof \Aurora\Modules\Core\Classes\User)
+			{
+				$this->setUserCapabilities($oUser);
+			}
+		}
 	}
 	
+	/**
+	 * Applies capabilities for users from deleted groups.
+	 * @param array $aArgs
+	 * @param mixed $mResult
+	 */
+	public function onAfterRemoveDeleteGroups(&$aArgs, &$mResult)
+	{
+		if (is_array($mResult) && !empty($mResult))
+		{
+			$this->setUserListCapabilities($mResult);
+		}
+	}
+	
+	/**
+	 * Applies capabilities for users removed from groups.
+	 * @param array $aArgs
+	 * @param mixed $mResult
+	 */
 	public function onAfterRemoveUsersFromGroup(&$aArgs, &$mResult)
 	{
-		\Aurora\System\Api::Log('****onAfterRemoveUsersFromGroup****', \Aurora\System\Enums\LogLevel::Full, 'sql-');
-		$this->setUserListCapabilities($aArgs['UsersIds']);
+		if ($mResult)
+		{
+			$this->setUserListCapabilities($aArgs['UsersIds']);
+		}
 	}
 	
+	/**
+	 * Applies capabilities for users removed from groups.
+	 * @param array $aArgs
+	 * @param mixed $mResult
+	 */
 	public function onAfterAddToGroup(&$aArgs, &$mResult)
 	{
-		\Aurora\System\Api::Log('****onAfterAddToGroup****', \Aurora\System\Enums\LogLevel::Full, 'sql-');
-		$this->setUserListCapabilities($aArgs['UsersIds']);
+		if ($mResult)
+		{
+			$this->setUserListCapabilities($aArgs['UsersIds']);
+		}
 	}
 	
+	/**
+	 * Applies capabilities for user.
+	 * @param array $aArgs
+	 * @param mixed $mResult
+	 */
 	public function onAfterSaveGroupsOfUser(&$aArgs, &$mResult)
 	{
-		$this->setUserListCapabilities([$aArgs['UserId']]);
+		if ($mResult)
+		{
+			$this->setUserListCapabilities([$aArgs['UserId']]);
+		}
 	}
 	
+	/**
+	 * Applies capabilities for users.
+	 * @param array $aUsersIds
+	 */
 	protected function setUserListCapabilities($aUsersIds)
 	{
 		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
@@ -219,6 +281,11 @@ class Module extends \Aurora\System\Module\AbstractModule
 		}
 	}
 	
+	/**
+	 * Applies capabilities for user.
+	 * @param \Aurora\Modules\Core\Classes\User $oUser
+	 * @param array $aUsersIds
+	 */
 	protected function setUserCapabilities($oUser, $aUsersIds = [])
 	{
 		if ($oUser instanceof \Aurora\Modules\Core\Classes\User)
