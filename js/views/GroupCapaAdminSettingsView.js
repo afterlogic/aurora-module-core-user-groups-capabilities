@@ -83,8 +83,6 @@ CGroupCapaAdminSettingsView.prototype.getCapabilitiesOfGroup = function ()
  */
 CGroupCapaAdminSettingsView.prototype.saveCapabilitiesOfGroup = function()
 {
-	this.isSaving(true);
-	
 	var
 		aGroupCapas = _.filter(this.aCapabilities, function (oCapa) {
 			return oCapa.enabled();
@@ -97,12 +95,12 @@ CGroupCapaAdminSettingsView.prototype.saveCapabilitiesOfGroup = function()
 		}
 	;
 	
-	Ajax.send(
-		Settings.ServerModuleName,
-		'SaveCapabilitiesOfGroup',
-		oParameters,
-		function (oResponse, oRequest) {
+	this.isSaving(true);
+	Screens.showLoading(TextUtils.i18n('%MODULENAME%/INFO_GROUP_CAPABILITIES_CHANGING'));
+	
+	Ajax.send(Settings.ServerModuleName, 'SaveCapabilitiesOfGroup', oParameters, function (oResponse, oRequest) {
 			this.isSaving(false);
+			Screens.hideLoading();
 			if (!oResponse.Result)
 			{
 				Api.showErrorByCode(oResponse, TextUtils.i18n('COREWEBCLIENT/ERROR_SAVING_SETTINGS_FAILED'));

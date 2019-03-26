@@ -115,7 +115,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 		
 		foreach ($aUsers as $oUser)
 		{
-			$this->setUserCapabilities($oUser);
+			$this->setUserCapabilities($oUser, $aUsersIds);
 		}
 		
 		return $bResult;
@@ -134,6 +134,46 @@ class Module extends \Aurora\System\Module\AbstractModule
 		return $aGroupsCapas[$iGroupId];
 	}
 	
+	static protected function getUserCapas($oUserGroupsManager, $iUserId, $aUsersIds)
+	{
+		static $aAllUserGroup = null;
+		if ($aAllUserGroup === null && !empty($aUsersIds))
+		{
+			$aFilters = [
+				'$AND' => [
+					'UserId' => [$aUsersIds, 'IN']
+				]
+			];
+			$oEavManager = \Aurora\System\Managers\Eav::getInstance();
+			$aAllUserGroup = $oEavManager->getEntities(\Aurora\Modules\CoreUserGroups\Classes\GroupUser::class, array(), 0, 0, $aFilters);
+		}
+		
+		$aGroupsOfUser = [];
+		if ($aAllUserGroup === null)
+		{
+			$aGroupsOfUser = $oUserGroupsManager->getGroupsOfUser($iUserId);
+		}
+		else
+		{
+			foreach ($aAllUserGroup as $oUserGroup)
+			{
+				if ($oUserGroup->UserId == $iUserId)
+				{
+					$aGroupsOfUser[] = $oUserGroup;
+				}
+			}
+		}
+		
+		$aUserCapas = [];
+		foreach ($aGroupsOfUser as $oGroupUser)
+		{
+			$aGroupCapas = self::getGroupCapabilities($oUserGroupsManager, $oGroupUser->GroupId);
+			$aUserCapas = array_unique(array_merge($aUserCapas, $aGroupCapas));
+		}
+		
+		return $aUserCapas;
+	}
+	
 	/**
 	 * Applies capabilities for user.
 	 * @param array $aArgs
@@ -147,11 +187,13 @@ class Module extends \Aurora\System\Module\AbstractModule
 	
 	public function onAfterRemoveUsersFromGroup(&$aArgs, &$mResult)
 	{
+		\Aurora\System\Api::Log('****onAfterRemoveUsersFromGroup****', \Aurora\System\Enums\LogLevel::Full, 'sql-');
 		$this->setUserListCapabilities($aArgs['UsersIds']);
 	}
 	
 	public function onAfterAddToGroup(&$aArgs, &$mResult)
 	{
+		\Aurora\System\Api::Log('****onAfterAddToGroup****', \Aurora\System\Enums\LogLevel::Full, 'sql-');
 		$this->setUserListCapabilities($aArgs['UsersIds']);
 	}
 	
@@ -168,26 +210,20 @@ class Module extends \Aurora\System\Module\AbstractModule
 		$aUsers = [];
 		if ($oCoreDecorator && !empty($aUsersIds))
 		{
-			$aUsers =  $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, $aFilters, 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+			$aUsers = $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, $aFilters, 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
 		}
 		
 		foreach ($aUsers as $oUser)
 		{
-			$this->setUserCapabilities($oUser);
+			$this->setUserCapabilities($oUser, $aUsersIds);
 		}
 	}
 	
-	protected function setUserCapabilities($oUser)
+	protected function setUserCapabilities($oUser, $aUsersIds = [])
 	{
 		if ($oUser instanceof \Aurora\Modules\Core\Classes\User)
 		{
-			$aGroupsOfUser = $this->getUserGroupsManager()->getGroupsOfUser($oUser->EntityId);
-			$aUserCapas = [];
-			foreach ($aGroupsOfUser as $oGroupUser)
-			{
-				$aGroupCapas = $this->getGroupCapabilities($this->getUserGroupsManager(), $oGroupUser->GroupId);
-				$aUserCapas = array_unique(array_merge($aUserCapas, $aGroupCapas));
-			}
+			$aUserCapas = self::getUserCapas($this->getUserGroupsManager(), $oUser->EntityId, $aUsersIds);
 
 			$aAllCapaModules = [];
 			$aAllowedCapaModules = [];
