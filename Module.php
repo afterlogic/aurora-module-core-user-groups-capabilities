@@ -20,24 +20,6 @@ class Module extends \Aurora\System\Module\AbstractModule
 			
 	public function init()
 	{
-		$this->aCapabilities = [
-			'Mail' => [
-				'Name' => $this->i18N('LABEL_MAIL_CAPABILITY_NAME'),
-				'Description' => $this->i18N('LABEL_MAIL_CAPABILITY_DESC'),
-				'Modules' => ['Mail', 'MailDomains', 'MailNotesPlugin']
-			],
-			'Files' => [
-				'Name' => $this->i18N('LABEL_FILES_CAPABILITY_NAME'),
-				'Description' => $this->i18N('LABEL_FILES_CAPABILITY_DESC'),
-				'Modules' => ['Files', 'FilesZipFolder']
-			],
-			'Contacts' => [
-				'Name' => $this->i18N('LABEL_CONTACTS_CAPABILITY_NAME'),
-				'Description' => $this->i18N('LABEL_CONTACTS_CAPABILITY_DESC'),
-				'Modules' => ['Contacts']
-			]
-		];
-		
 		$this->subscribeEvent('Core::Login::after', array($this, 'onAfterLogin'));
 		$this->subscribeEvent('CoreUserGroups::DeleteGroups::after', array($this, 'onAfterRemoveDeleteGroups'));
 		$this->subscribeEvent('CoreUserGroups::RemoveUsersFromGroup::after', array($this, 'onAfterRemoveUsersFromGroup'));
@@ -66,7 +48,19 @@ class Module extends \Aurora\System\Module\AbstractModule
 	{
 		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
 		
-		return ['Capabilities' => $this->aCapabilities];
+		$aCapabilities = [];
+		foreach ($this->getConfig('Capabilities', []) as $oCapa)
+		{
+			$aCapabilities[$oCapa['Name']] = [
+				'Name' => $this->i18N($oCapa['DisplayNameLangConst']),
+				'Description' => $this->i18N($oCapa['DescriptionLangConst']),
+				'Modules' => $oCapa['Modules']
+			];
+		}
+		
+		return [
+			'Capabilities' => $aCapabilities
+		];
 	}
 	
 	/**
