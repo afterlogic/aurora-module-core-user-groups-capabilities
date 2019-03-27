@@ -215,8 +215,9 @@ class Module extends \Aurora\System\Module\AbstractModule
 		if ($mResult !== false)
 		{
 			$oUser = \Aurora\System\Api::getAuthenticatedUser();
-			if ($oUser instanceof \Aurora\Modules\Core\Classes\User)
+			if ($oUser instanceof \Aurora\Modules\Core\Classes\User && $oUser->Role === \Aurora\System\Enums\UserRole::NormalUser)
 			{
+				// DB operations are not allowed for super admin here (DB might not be configured yet)
 				$this->setUserCapabilities($oUser);
 			}
 		}
