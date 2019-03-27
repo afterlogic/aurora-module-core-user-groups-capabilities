@@ -16,8 +16,6 @@ namespace Aurora\Modules\CoreUserGroupsCapabilities;
  */
 class Module extends \Aurora\System\Module\AbstractModule
 {
-	public $aCapabilities = [];
-			
 	public function init()
 	{
 		$this->subscribeEvent('Core::Login::after', array($this, 'onAfterLogin'));
@@ -40,14 +38,8 @@ class Module extends \Aurora\System\Module\AbstractModule
 		return $oUserGroupsModule->getGroupsManager();
 	}
 	
-	/**
-	 * Obtains module settings.
-	 * @return array
-	 */
-	public function GetSettings()
+	protected function getCapabilities()
 	{
-		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
-		
 		$aCapabilities = [];
 		foreach ($this->getConfig('Capabilities', []) as $oCapa)
 		{
@@ -57,10 +49,38 @@ class Module extends \Aurora\System\Module\AbstractModule
 				'Modules' => $oCapa['Modules']
 			];
 		}
+		return $aCapabilities;
+	}
+	
+	/**
+	 * Obtains module settings.
+	 * @return array
+	 */
+	public function GetSettings()
+	{
+		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
 		
 		return [
-			'Capabilities' => $aCapabilities
+			'Capabilities' => $this->getCapabilities()
 		];
+	}
+	
+	public function InitCapas()
+	{
+		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::SuperAdmin);
+		
+		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
+		$aUsers =  $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, [], 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+		$aUsersIds = [];
+		foreach ($aUsers as $oUser)
+		{
+			$aUsersIds[] = $oUser->EntityId;
+		}
+		foreach ($aUsers as $oUser)
+		{
+			$this->setUserCapabilities($oUser, $aUsersIds);
+		}
+		return true;
 	}
 	
 	/**
@@ -288,7 +308,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 
 			$aAllCapaModules = [];
 			$aAllowedCapaModules = [];
-			foreach ($this->aCapabilities as $sCapaName => $oCapa)
+			foreach ($this->getCapabilities() as $sCapaName => $oCapa)
 			{
 				$aAllCapaModules = array_unique(array_merge($aAllCapaModules, $oCapa['Modules']));
 				if (in_array($sCapaName, $aUserCapas))

@@ -34,6 +34,10 @@ module.exports = function (oAppData) {
 					Settings.HashModuleName + '-user',
 					TextUtils.i18n('%MODULENAME%/LABEL_SETTINGS_TAB_CAPABILITIES')
 				]);
+				ModulesManager.run('AdminPanelWebclient', 'changeAdminPanelEntityData', [{
+					Type: 'Group',
+					AdditionalButtons: [{'ButtonView': require('modules/%ModuleName%/js/views/InitCapaButtonView.js')}]
+				}]);
 			}
 		};
 	}
