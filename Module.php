@@ -7,9 +7,11 @@
 
 namespace Aurora\Modules\CoreUserGroupsCapabilities;
 
+use Aurora\Modules\Core\Models\User;
+
 /**
  * Provides capabilities for user groups.
- * 
+ *
  * @license https://www.gnu.org/licenses/agpl-3.0.html AGPL-3.0
  * @license https://afterlogic.com/products/common-licensing Afterlogic Software License
  * @copyright Copyright (c) 2019, Afterlogic Corp.
@@ -25,21 +27,14 @@ class Module extends \Aurora\System\Module\AbstractModule
 		$this->subscribeEvent('CoreUserGroups::RemoveUsersFromGroup::after', array($this, 'onAfterRemoveUsersFromGroup'));
 		$this->subscribeEvent('CoreUserGroups::AddToGroup::after', array($this, 'onAfterAddToGroup'));
 		$this->subscribeEvent('CoreUserGroups::SaveGroupsOfUser::after', array($this, 'onAfterSaveGroupsOfUser'));
-		
-		\Aurora\Modules\CoreUserGroups\Classes\Group::extend(
-			self::GetName(),
-			[
-				'Capabilities' => array('text', '')
-			]
-		);
 	}
-	
+
 	protected function getUserGroupsManager()
 	{
 		$oUserGroupsModule = \Aurora\System\Api::GetModule('CoreUserGroups');
 		return $oUserGroupsModule->getGroupsManager();
 	}
-	
+
 	protected function getCapabilities()
 	{
 		$aCapabilities = [];
@@ -53,7 +48,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 		}
 		return $aCapabilities;
 	}
-	
+
 	/**
 	 * Obtains module settings.
 	 * @return array
@@ -61,22 +56,22 @@ class Module extends \Aurora\System\Module\AbstractModule
 	public function GetSettings()
 	{
 		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
-		
+
 		return [
 			'Capabilities' => $this->getCapabilities()
 		];
 	}
-	
+
 	public function InitCapas()
 	{
 		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::SuperAdmin);
-		
+
 		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
-		$aUsers =  $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, [], 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+		$aUsers = User::all();
 		$aUsersIds = [];
 		foreach ($aUsers as $oUser)
 		{
-			$aUsersIds[] = $oUser->EntityId;
+			$aUsersIds[] = $oUser->Id;
 		}
 		foreach ($aUsers as $oUser)
 		{
@@ -84,7 +79,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 		}
 		return true;
 	}
-	
+
 	/**
 	 * Obtains capabilities of the group.
 	 * @param int $GroupId Group identifier.
@@ -93,13 +88,13 @@ class Module extends \Aurora\System\Module\AbstractModule
 	public function GetCapabilitiesOfGroup($GroupId)
 	{
 		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
-		
+
 		$oGroup = $this->getUserGroupsManager()->getGroup($GroupId);
 		$aCapabilities = $oGroup->{self::GetName() . '::Capabilities'};
-		
+
 		return json_decode($aCapabilities);
 	}
-	
+
 	/**
 	 * Saves capability list of the group.
 	 * @param int $GroupId Group identifier.
@@ -109,35 +104,33 @@ class Module extends \Aurora\System\Module\AbstractModule
 	public function SaveCapabilitiesOfGroup($GroupId, $CapaNames)
 	{
 		\Aurora\System\Api::checkUserRoleIsAtLeast(\Aurora\System\Enums\UserRole::TenantAdmin);
-		
-		
+
+
 		$oGroup = $this->getUserGroupsManager()->getGroup($GroupId);
-		$oGroup->{self::GetName() . '::Capabilities'} = json_encode($CapaNames);
-		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
-		$bResult = $oEavManager->saveEntity($oGroup);
-		
+		$oGroup->setExtendedProp(self::GetName() . '::Capabilities', json_encode($CapaNames));
+		$bResult = $oGroup->save();
+
 		$aGroupUserObjects = $this->getUserGroupsManager()->getGroupUserObjects($GroupId);
 		$aUsersIds = [];
 		foreach ($aGroupUserObjects as $oGroupUser)
 		{
 			$aUsersIds[] = $oGroupUser->UserId;
 		}
-		$aFilters = ['EntityId' => [$aUsersIds, 'IN']];
 		$oCoreDecorator = \Aurora\Modules\Core\Module::Decorator();
 		$aUsers = [];
 		if ($oCoreDecorator && !empty($aUsersIds))
 		{
-			$aUsers =  $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, $aFilters, 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+			$aUsers = User::whereIn('Id', $aUsersIds)->get();
 		}
-		
+
 		foreach ($aUsers as $oUser)
 		{
 			$this->setUserCapabilities($oUser, $aUsersIds);
 		}
-		
+
 		return $bResult;
 	}
-	
+
 	/**
 	 * Obtains capabilities for specified group.
 	 * @staticvar array $aGroupsCapas
@@ -148,17 +141,17 @@ class Module extends \Aurora\System\Module\AbstractModule
 	static protected function getGroupCapabilities($oUserGroupsManager, $iGroupId)
 	{
 		static $aGroupsCapas = [];
-		
+
 		if (!isset($aGroupsCapas[$iGroupId]))
 		{
 			$oGroup = $oUserGroupsManager->getGroup($iGroupId);
 			$sCapabilities = $oGroup->{self::GetName() . '::Capabilities'};
 			$aGroupsCapas[$iGroupId] = empty($sCapabilities) ? [] : json_decode($sCapabilities);
 		}
-		
+
 		return $aGroupsCapas[$iGroupId];
 	}
-	
+
 	/**
 	 * Obtains capabilities for specified user.
 	 * @staticvar array $aAllUserGroup
@@ -180,7 +173,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 			$oEavManager = \Aurora\System\Managers\Eav::getInstance();
 			$aAllUserGroup = $oEavManager->getEntities(\Aurora\Modules\CoreUserGroups\Classes\GroupUser::class, array(), 0, 0, $aFilters);
 		}
-		
+
 		$aGroupsOfUser = [];
 		if ($aAllUserGroup === null)
 		{
@@ -196,17 +189,17 @@ class Module extends \Aurora\System\Module\AbstractModule
 				}
 			}
 		}
-		
+
 		$aUserCapas = [];
 		foreach ($aGroupsOfUser as $oGroupUser)
 		{
 			$aGroupCapas = self::getGroupCapabilities($oUserGroupsManager, $oGroupUser->GroupId);
 			$aUserCapas = array_unique(array_merge($aUserCapas, $aGroupCapas));
 		}
-		
+
 		return $aUserCapas;
 	}
-	
+
 	/**
 	 * Applies capabilities for just authenticated user.
 	 * @param array $aArgs
@@ -217,14 +210,14 @@ class Module extends \Aurora\System\Module\AbstractModule
 		if ($mResult !== false)
 		{
 			$oUser = \Aurora\System\Api::getAuthenticatedUser();
-			if ($oUser instanceof \Aurora\Modules\Core\Classes\User && $oUser->isNormalOrTenant())
+			if ($oUser instanceof \Aurora\Modules\Core\Models\User && $oUser->isNormalOrTenant())
 			{
 				// DB operations are not allowed for super admin here (DB might not be configured yet)
 				$this->setUserCapabilities($oUser);
 			}
 		}
 	}
-	
+
 	/**
 	 * Applies capabilities for users from deleted groups.
 	 * @param array $aArgs
@@ -237,7 +230,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 			$this->setUserListCapabilities($mResult);
 		}
 	}
-	
+
 	/**
 	 * Applies capabilities for users removed from groups.
 	 * @param array $aArgs
@@ -250,7 +243,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 			$this->setUserListCapabilities($aArgs['UsersIds']);
 		}
 	}
-	
+
 	/**
 	 * Applies capabilities for users removed from groups.
 	 * @param array $aArgs
@@ -263,7 +256,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 			$this->setUserListCapabilities($aArgs['UsersIds']);
 		}
 	}
-	
+
 	/**
 	 * Applies capabilities for user.
 	 * @param array $aArgs
@@ -276,28 +269,26 @@ class Module extends \Aurora\System\Module\AbstractModule
 			$this->setUserListCapabilities([$aArgs['UserId']]);
 		}
 	}
-	
+
 	/**
 	 * Applies capabilities for users.
 	 * @param array $aUsersIds
 	 */
 	protected function setUserListCapabilities($aUsersIds)
 	{
-		$oEavManager = \Aurora\System\Managers\Eav::getInstance();
-		$aFilters = ['EntityId' => [$aUsersIds, 'IN']];
 		$oCoreDecorator = \Aurora\Modules\Core\Module::Decorator();
 		$aUsers = [];
 		if ($oCoreDecorator && !empty($aUsersIds))
 		{
-			$aUsers = $oEavManager->getEntities(\Aurora\Modules\Core\Classes\User::class, [], 0, 0, $aFilters, 'PublicId', \Aurora\System\Enums\SortOrder::ASC);
+			$aUsers = User::whereIn('Id', $aUsersIds)->get();
 		}
-		
+
 		foreach ($aUsers as $oUser)
 		{
 			$this->setUserCapabilities($oUser, $aUsersIds);
 		}
 	}
-	
+
 	/**
 	 * Applies capabilities for user.
 	 * @param \Aurora\Modules\Core\Classes\User $oUser
@@ -331,7 +322,7 @@ class Module extends \Aurora\System\Module\AbstractModule
 					$oUser->disableModule($sModuleName);
 				}
 			}
-			
+
 			$oCoreModuleDecorator = \Aurora\System\Api::GetModuleDecorator('Core');
 			$oCoreModuleDecorator->UpdateUserObject($oUser);
 		}
