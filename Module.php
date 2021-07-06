@@ -296,9 +296,9 @@ class Module extends \Aurora\System\Module\AbstractModule
 	 */
 	protected function setUserCapabilities($oUser, $aUsersIds = [])
 	{
-		if ($oUser instanceof \Aurora\Modules\Core\Classes\User)
+		if ($oUser instanceof \Aurora\Modules\Core\Models\User)
 		{
-			$aUserCapas = self::getUserCapas($this->getUserGroupsManager(), $oUser->EntityId, $aUsersIds);
+			$aUserCapas = self::getUserCapas($this->getUserGroupsManager(), $oUser->Id, $aUsersIds);
 
 			$aAllCapaModules = [];
 			$aAllowedCapaModules = [];
