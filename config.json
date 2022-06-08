@@ -1,10 +1,18 @@
 {
-	"Disabled": [
-		true,
-		"bool"
-	],
-	"Capabilities": [
-		[],
-		"array"
-	]
+  "Disabled": [
+    true,
+    "bool"
+  ],
+  "Disabled_Description": [
+    "",
+    "string"
+  ],
+  "Capabilities": [
+    [],
+    "array"
+  ],
+  "Capabilities_Description": [
+    "",
+    "string"
+  ]
 }
